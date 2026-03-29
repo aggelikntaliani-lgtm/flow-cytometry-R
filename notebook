@@ -1,0 +1,125 @@
+#libraries
+
+BiocManager::install("flowCore")
+BiocManager::install("flowWorkspace")
+BiocManager::install("openCyto")
+BiocManager::install("flowAI")
+BiocManager::install("ggcyto")
+BiocManager::install("CytoML")
+devtools::install_github("DillonHammill/CytoExploreR")
+devtools::install_github("DillonHammill/CytoExploreRData")
+
+library(flowCore)
+library(CytoML)
+library(flowAI)
+library(flowWorkspace)
+library(ggcyto)
+library(tidyverse)
+library(CytoExploreR)
+library(openCyto)
+library(CytoExploreRData)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+
+#read dataset
+fs <- read.flowSet(path = "C:/Users/aggel/Documents/RStudio/1. Rstudio 2026/flow cytometrry/flow cytometry project/FlowRepository_FR-FCM-ZZML_files",pattern = ".fcs", 
+                   truncate_max_range = FALSE, alter.names = T)
+fs[1]
+fs
+colnames(fs[1])
+
+#single file
+firstfile <- "C:/Users/aggel/Documents/RStudio/1. Rstudio 2026/flow cytometrry/flow cytometry project/FlowRepository_FR-FCM-ZZML_files/c1a.fcs"
+fcsfile<- read.FCS(firstfile, truncate_max_range = FALSE)
+names(fcsfile)
+exprs(fcsfile)
+each_col(fcsfile, median)
+keyword(fcsfile)
+
+#sample informations
+pData(fs)[1:5,]
+pData(fs)$well <- gsub(".*del_(\\d{1,2}-\\d{1,2}-\\d{2,4}).*?\\.fcs", "\\1", sampleNames(fs))
+pData(fs)[1:5,]
+colnames(fs)
+fs[[1]]@parameters@data
+
+#conpensation
+spillover(fs[[1]])
+fs_comp <-compensate(fs, spillover(fs[[1]])$SPILL)
+fs_comp[[1]]@parameters@data
+
+#QC
+flow_auto_qc(fs_comp)
+
+#Transformation 
+fs_comp[[1]]@parameters@data
+trans <- estimateLogicle(fs_comp[[1]], colnames(fs_comp[[1]][,4:8]))
+fs_comp_clean_trans <- transform(fs_comp, trans)
+fs_comp_clean_trans[[1]]
+fs_comp_clean_trans[[1]]@parameters@data
+
+#visualize results using ggcyto
+autoplot(fs_comp[[1]])
+autoplot(fs_comp_clean_trans[[1]])
+autoplot(fs_comp, x="FSC.A", y="SSC.A", bins = 256)+ facet_wrap(~ well)
+autoplot(fs_comp_clean_trans, x="FSC.A", y="PE.A", bins = 256)+ facet_wrap(~ well)
+
+#GatingSet
+gs <- GatingSet(fs_comp_clean_trans)
+fs_data<- gs_pop_get_data(gs)
+my_gate<- fsApply(fs_data, function(fr) openCyto:::.flowClust.2d(fr, channels= c("FSC.A","SSC.A")))
+gs_pop_add(gs, my_gate, parent = "root", name="my_gate")
+recompute(gs)
+
+#| label: plot each set
+for (i in 1:length(gs)) {
+  # Generate the plot for each sample
+  p <- autoplot(gs[[i]], x="FSC.A", y="SSC.A", "my_gate", bins=256)
+  
+  # Print the plot
+  print(p)
+  
+  # Optionally, you can save each plot to a file
+  ggsave(filename=paste("plot_", i, ".png", sep=""), plot=p)
+}
+
+#statistics
+gs_pop_get_stats(gs)
+gs_pop_get_stats(gs, "my_gate", "percent")
+gs_pop_get_stats(gs, "my_gate", type = pop.MFI)
+
+pop.quantiles <- function(fr){
+  chnls <- colnames(fr)
+  res <- matrixStats::colQuantiles(exprs(fr), probs = 0.75)
+  names(res) <- chnls
+  res
+}
+gs_pop_get_stats(gs, gs_get_pop_paths(gs), type = pop.quantiles)
+
+pop.mean <- function(fr){
+  chnls <- colnames(fr)
+  res <- colMeans(exprs(fr))
+  names(res) <- chnls
+  res
+}
+gs_pop_get_stats(gs, gs_get_pop_paths(gs), type = pop.mean)
+
+#populations stats for downstream analysis
+ps <- gs_pop_get_count_with_meta(gs)
+ps <- ps %>% mutate(percent_of_parent=Count/ParentCount)
+
+styled_table <- ps %>%
+  select(sampleName, well, Population, Count, ParentCount, percent_of_parent) %>%
+  head() %>%
+  mutate(across(everything(), ~cell_spec(.x, background = "black", color = "white"))) %>%
+  kable("html", escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+#R Markdown document
+styled_table
+
+
+#save the data
+save.image(file = "facs_data_with_plots_stats.Rdata")
+renv::snapshot()
