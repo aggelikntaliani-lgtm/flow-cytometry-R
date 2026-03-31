@@ -11,14 +11,13 @@ Dataset: Experiment name "Mobilization of cells through acute exercise in metabo
 
 #Transformation (convert skewed data into a more normally distributed form)
 
-#Visulaize the results using ggcyto 
-![Transformed_Autoplot](transformed_autoplot.pdf)
-![]()
-![]()
+#Visulaize the results using ggcyto
+![SSC_FSC_Plot](SSC_FSC_plot.png)
+![Markers_Plot](markers_plot.png)
 #Gating (Cell Population Identification, Noise Reduction, Analysis Simplification, Quantitative Analysis,Sequential Gating)
-![]()
-![]()
-![]()
-![]()
+![C1_Before_Plot](c1_before_plot.png)
+![C1_After_Plot](c1_after_plot.png)
+![M1_After_Plot](m1_after_plot.png)
+![R1_After_Plot](r1_after_plot.png)
 #statistics
 
